@@ -1,4 +1,4 @@
-const CACHE = 'foto-bukti-v4'; // naikkan angka ini setiap kali index.html diubah
+const CACHE = 'foto-bukti-v5'; // naikkan angka ini setiap kali index.html diubah
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './logo.png', './kop.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

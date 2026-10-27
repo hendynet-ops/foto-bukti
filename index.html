@@ -49,6 +49,12 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 #selbar span{flex:1;color:var(--mut);font-size:13px}
 #selbar button{min-width:0}
 button.pri{background:var(--ok);color:#000;border-color:var(--ok);font-weight:600}
+dialog{margin:auto;background:var(--bg);color:var(--fg);border:1px solid #2a3038;border-radius:14px;padding:16px;width:min(440px,calc(100% - 24px))}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog form{display:grid;gap:12px}
+dialog label{display:grid;gap:6px;font-size:13px;color:var(--mut)}
+#jobc{grid-column:1/-1}
+#jobc[hidden]{display:none}
 #again{position:fixed;left:50%;top:40%;transform:translateX(-50%);padding:14px 22px;box-shadow:0 4px 20px rgba(0,0,0,.6)}
 #again[hidden]{display:none}
 #shot{width:74px;height:74px;border-radius:50%;border:4px solid #fff;background:#fff;padding:0;min-width:0;box-shadow:inset 0 0 0 4px var(--bg)}
@@ -75,8 +81,9 @@ button.pri{background:var(--ok);color:#000;border-color:var(--ok);font-weight:60
       <input id="note" type="text" placeholder="Catatan" maxlength="80" autocomplete="off">
     </div>
     <div class="in">
-      <select id="job" aria-label="Pekerjaan"><option value="">Tanpa pekerjaan</option></select>
+      <select id="job" aria-label="Pekerjaan"></select>
       <div class="seg" id="ph"><button data-v="Sebelum">Sebelum</button><button data-v="Sesudah">Sesudah</button></div>
+      <input id="jobc" type="text" placeholder="Tulis nama pekerjaan" maxlength="60" autocomplete="off" hidden>
     </div>
     <div class="row" id="main">
       <button id="flip">Balik kamera</button>
@@ -87,10 +94,17 @@ button.pri{background:var(--ok);color:#000;border-color:var(--ok);font-weight:60
       <button id="seloff">Batal</button>
       <span id="selc">Ketuk foto untuk memilih</span>
       <button id="del">Hapus</button>
+      <button id="ed">Edit</button>
       <button id="mk" class="pri">Buat PDF</button>
     </div>
   </div>
 </div>
+<dialog id="fd">
+  <form method="dialog">
+    <label>Subjudul kop<input id="f_sub" maxlength="70" autocomplete="off"></label>
+    <div class="row"><button type="button" id="fdx">Batal</button><button value="ok" class="pri">Simpan</button></div>
+  </form>
+</dialog>
 <button id="again" class="pri" hidden>Simpan / bagikan</button>
 <div id="toast" role="status"></div>
 <script>
@@ -104,10 +118,16 @@ let stream, facing = 'environment', pos = null, heading = null, addr = '', addrA
 
 /* Pekerjaan + Sebelum/Sesudah (dipakai untuk menyusun form A4) */
 const JOBS = ['Instalasi RAM', 'Instalasi SSD', 'Cleaning Internal & Eksternal PC', 'Pemeriksaan Keyboard & Mouse', 'Pemeriksaan Network'];
-const jobI = $('#job');
+const jobI = $('#job'), jobC = $('#jobc'), OWN = '*';
 JOBS.forEach(j => jobI.add(new Option(j, j)));
-jobI.value = JOBS.includes(localStorage.getItem('job')) ? localStorage.getItem('job') : '';
-jobI.onchange = () => localStorage.setItem('job', jobI.value);
+jobI.add(new Option('Lainnya (isi sendiri)…', OWN));
+jobI.value = [...JOBS, OWN].includes(localStorage.getItem('job')) ? localStorage.getItem('job') : JOBS[0];
+jobC.value = localStorage.getItem('jobc') || '';
+const jobShow = () => { jobC.hidden = jobI.value !== OWN; };
+jobI.onchange = () => { localStorage.setItem('job', jobI.value); jobShow(); if (!jobC.hidden) jobC.focus(); };
+jobC.oninput = () => localStorage.setItem('jobc', jobC.value);
+jobShow();
+const jobNow = () => jobI.value === OWN ? jobC.value.trim() : jobI.value;
 let phase = localStorage.getItem('ph') === 'Sesudah' ? 'Sesudah' : 'Sebelum';
 const phSet = p => { phase = p; localStorage.setItem('ph', p); document.querySelectorAll('#ph button').forEach(b => b.classList.toggle('on', b.dataset.v === p)); };
 document.querySelectorAll('#ph button').forEach(b => b.onclick = () => phSet(b.dataset.v));
@@ -244,7 +264,7 @@ shot.onclick = () => {
     x.font = `700 ${fs * 1.1}px system-ui,sans-serif`; x.textAlign = 'center'; x.fillText('N', cx, cy + r + fs * .15); x.textAlign = 'left';
   }
   const name = `foto_${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.jpg`;
-  const meta = { job: jobI.value, ph: jobI.value ? phase : '', note: noteI.value.trim(), loc: locI.value.trim() };
+  const job = jobNow(), meta = { job, ph: job ? phase : '', note: noteI.value.trim(), loc: locI.value.trim() };
   c.toBlob(async b => { await dbAdd({ blob: b, name, t: now.getTime(), ...meta }); await output(b, name); renderHist(); }, 'image/jpeg', .88);
 };
 
@@ -310,14 +330,20 @@ $('#del').onclick = async () => {
 };
 
 /* Form A4: 2 x 2 foto per halaman, dirender ke canvas lalu dibungkus jadi PDF (tanpa library) */
-const kop = new Image(); kop.src = 'kop.png'; // kop tetap, dipotong dari aset/From Foto Pekerjaan.png
+const kop = new Image(); kop.src = 'kop.png'; // dipotong dari aset/From Foto Pekerjaan.png, area subjudul dikosongkan
+const SUB = 'Pemeliharaan dan Optimalisasi PC Desktop';
+const fd = $('#fd'), subI = $('#f_sub');
+$('#ed').onclick = () => { subI.value = localStorage.getItem('sub') || SUB; fd.showModal(); };
+$('#fdx').onclick = () => fd.close();
+fd.onclose = () => { if (fd.returnValue === 'ok') { localStorage.setItem('sub', subI.value.trim()); toast('Subjudul disimpan'); } fd.returnValue = ''; };
 $('#mk').onclick = async () => {
   if (!sel.length) return toast('Pilih foto dulu');
   const lok = items.find(it => it.key === sel[0]).loc || locI.value.trim();
   toast('Membuat PDF…');
   try {
     const now = new Date(), blob = await makeForm(lok, items.filter(it => sel.includes(it.key)));
-    await output(blob, `form_foto_${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.pdf`);
+    const base = lok.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim() || 'form_foto';
+    await output(blob, `${base}_${p2(now.getDate())}-${p2(now.getMonth() + 1)}-${now.getFullYear()}.pdf`);
     selSet(false);
   } catch (e) { toast('Gagal membuat PDF: ' + e.message); }
 };
@@ -355,6 +381,9 @@ async function drawPage(lok, rows, pg, n, made) {
   const box = (X, Y, W, H) => x.strokeRect(X * K, Y * K, W * K, H * K);
   const M = 8, CW = 210 - 2 * M, HH = CW * kop.naturalHeight / kop.naturalWidth;
   x.drawImage(kop, M * K, M * K, CW * K, HH * K);
+  const ks = CW / 2407; // mm per piksel gambar contoh asli (lebar kop 2407 px)
+  const sub = localStorage.getItem('sub') ?? SUB;
+  if (sub) txt(x, sub, M + 1247 * ks, M + 221 * ks, 1230 * ks, 4.4, 700, 'center');
   txt(x, 'LOKASI : ' + (lok || '-'), M, M + HH + 5, CW, 4.5, 700);
   // Grid 2 x 2
   const top = M + HH + 10, bot = 297 - M - 6, gap = 4, lab = 8, rowH = (bot - top - gap) / 2, colW = (CW - 5) / 2;
