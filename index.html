@@ -49,14 +49,6 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 #selbar span{flex:1;color:var(--mut);font-size:13px}
 #selbar button{min-width:0}
 button.pri{background:var(--ok);color:#000;border-color:var(--ok);font-weight:600}
-dialog{margin:auto;background:var(--bg);color:var(--fg);border:1px solid #2a3038;border-radius:14px;padding:16px;width:min(440px,calc(100% - 24px));max-height:calc(100% - 24px)}
-dialog::backdrop{background:rgba(0,0,0,.6)}
-dialog form{display:grid;gap:10px}
-dialog label{display:grid;gap:4px;font-size:13px;color:var(--mut)}
-dialog h2{font-size:17px}
-#klp{display:flex;gap:8px;align-items:center}
-#klp img{height:40px;max-width:80px;object-fit:contain;background:#fff;border-radius:6px;padding:2px}
-#klp img:not([src]){display:none}
 #again{position:fixed;left:50%;top:40%;transform:translateX(-50%);padding:14px 22px;box-shadow:0 4px 20px rgba(0,0,0,.6)}
 #again[hidden]{display:none}
 #shot{width:74px;height:74px;border-radius:50%;border:4px solid #fff;background:#fff;padding:0;min-width:0;box-shadow:inset 0 0 0 4px var(--bg)}
@@ -99,19 +91,6 @@ dialog h2{font-size:17px}
     </div>
   </div>
 </div>
-<dialog id="fd">
-  <form method="dialog">
-    <h2>Form A4 (4 foto per halaman)</h2>
-    <label>Judul<input id="f_judul"></label>
-    <label>Subjudul<input id="f_sub"></label>
-    <label>Lokasi<input id="f_lok"></label>
-    <label>Kop kiri, baris 1<input id="f_k1"></label>
-    <label>Kop kiri, baris 2<input id="f_k2"></label>
-    <label>Kop kiri, baris 3<input id="f_k3"></label>
-    <label>Logo kop kiri (opsional)<div id="klp"><img id="klimg" alt=""><input id="f_klogo" type="file" accept="image/*"><button type="button" id="kldel">Hapus</button></div></label>
-    <div class="row"><button type="button" id="fdx">Batal</button><button value="ok" class="pri">Buat PDF</button></div>
-  </form>
-</dialog>
 <button id="again" class="pri" hidden>Simpan / bagikan</button>
 <div id="toast" role="status"></div>
 <script>
@@ -331,35 +310,13 @@ $('#del').onclick = async () => {
 };
 
 /* Form A4: 2 x 2 foto per halaman, dirender ke canvas lalu dibungkus jadi PDF (tanpa library) */
-const FORM = { judul: 'FOTO DOKUMENTASI', sub: 'Pemeliharaan dan Optimalisasi PC Desktop', k1: 'PT. PLN (Persero)', k2: 'UNIT INDUK DISTRIBUSI JAKARTA RAYA', k3: 'UP2D JAKARTA' };
-const fd = $('#fd'), FF = ['judul', 'sub', 'lok', 'k1', 'k2', 'k3'];
-const qlogo = new Image(); qlogo.src = 'logo-form.png';
-const klImg = $('#klimg');
-const klSet = u => { try { u ? localStorage.setItem('klogo', u) : localStorage.removeItem('klogo'); } catch (e) { toast('Logo terlalu besar'); } u ? klImg.src = u : klImg.removeAttribute('src'); };
-klSet(localStorage.getItem('klogo'));
-$('#kldel').onclick = () => { klSet(null); $('#f_klogo').value = ''; };
-$('#f_klogo').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  const i = await loadImg(f), s = Math.min(1, 400 / Math.max(i.naturalWidth, i.naturalHeight));
-  const c = document.createElement('canvas'); c.width = Math.round(i.naturalWidth * s); c.height = Math.round(i.naturalHeight * s);
-  c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); klSet(c.toDataURL('image/png'));
-};
-$('#fdx').onclick = () => fd.close();
-$('#mk').onclick = () => {
+const kop = new Image(); kop.src = 'kop.png'; // kop tetap, dipotong dari aset/From Foto Pekerjaan.png
+$('#mk').onclick = async () => {
   if (!sel.length) return toast('Pilih foto dulu');
-  let f = {}; try { f = JSON.parse(localStorage.getItem('form')) || {}; } catch (e) {}
-  f = { ...FORM, ...f };
-  f.lok = items.find(it => it.key === sel[0]).loc || locI.value.trim();
-  FF.forEach(k => $('#f_' + k).value = f[k] || '');
-  fd.showModal();
-};
-fd.onclose = async () => {
-  if (fd.returnValue !== 'ok') return; fd.returnValue = '';
-  const f = {}; FF.forEach(k => f[k] = $('#f_' + k).value.trim());
-  const { lok, ...keep } = f; localStorage.setItem('form', JSON.stringify(keep));
+  const lok = items.find(it => it.key === sel[0]).loc || locI.value.trim();
   toast('Membuat PDF…');
   try {
-    const now = new Date(), blob = await makeForm(f, items.filter(it => sel.includes(it.key)));
+    const now = new Date(), blob = await makeForm(lok, items.filter(it => sel.includes(it.key)));
     await output(blob, `form_foto_${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.pdf`);
     selSet(false);
   } catch (e) { toast('Gagal membuat PDF: ' + e.message); }
@@ -391,24 +348,14 @@ function contain(x, img, X, Y, W, H) {
   const s = Math.min(W * K / img.naturalWidth, H * K / img.naturalHeight), w = img.naturalWidth * s, h = img.naturalHeight * s;
   x.drawImage(img, X * K + (W * K - w) / 2, Y * K + (H * K - h) / 2, w, h);
 }
-async function drawPage(f, rows, pg, n, kl, made) {
+async function drawPage(lok, rows, pg, n, made) {
   const c = document.createElement('canvas'); c.width = PW; c.height = PH;
   const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, PW, PH);
   x.strokeStyle = '#222'; x.lineWidth = .3 * K; x.fillStyle = '#231f20'; x.textBaseline = 'middle';
   const box = (X, Y, W, H) => x.strokeRect(X * K, Y * K, W * K, H * K);
-  const M = 8, CW = 210 - 2 * M, HH = 26, c1 = CW * .255, c3 = CW * .22, c2 = CW - c1 - c3, cy = M + HH / 2;
-  // Kop: klien | judul | logo Quadran
-  box(M, M, c1, HH); box(M + c1, M, c2, HH); box(M + c1 + c2, M, c3, HH);
-  let tx = M + 2;
-  if (kl) { contain(x, kl, M + 2, cy - 8, 14, 16); tx += 16; }
-  const tw = M + c1 - 2 - tx;
-  if (f.k1) txt(x, f.k1, tx, cy - 4.5, tw, 4.2, 700);
-  if (f.k2) txt(x, f.k2, tx, cy + .8, tw, 2.5);
-  if (f.k3) txt(x, f.k3, tx, cy + 4.6, tw, 2.5);
-  txt(x, f.judul, M + c1 + c2 / 2, M + HH * .36, c2 - 6, 7, 700, 'center');
-  txt(x, f.sub, M + c1 + c2 / 2, M + HH * .72, c2 - 6, 4.2, 600, 'center');
-  if (qlogo.complete && qlogo.naturalWidth) contain(x, qlogo, M + c1 + c2 + 3, M + 3, c3 - 6, HH - 6);
-  txt(x, 'LOKASI : ' + (f.lok || '-'), M, M + HH + 5, CW, 4.5, 700);
+  const M = 8, CW = 210 - 2 * M, HH = CW * kop.naturalHeight / kop.naturalWidth;
+  x.drawImage(kop, M * K, M * K, CW * K, HH * K);
+  txt(x, 'LOKASI : ' + (lok || '-'), M, M + HH + 5, CW, 4.5, 700);
   // Grid 2 x 2
   const top = M + HH + 10, bot = 297 - M - 6, gap = 4, lab = 8, rowH = (bot - top - gap) / 2, colW = (CW - 5) / 2;
   for (let r = 0; r < rows.length; r++) {
@@ -423,10 +370,10 @@ async function drawPage(f, rows, pg, n, kl, made) {
   const b = await new Promise(res => c.toBlob(res, 'image/jpeg', .85));
   return { jpg: new Uint8Array(await b.arrayBuffer()), w: PW, h: PH };
 }
-async function makeForm(f, list) {
+async function makeForm(lok, list) {
   const rows = formRows(list), n = Math.ceil(rows.length / 2), pages = [], made = fmt(new Date()).slice(0, 10);
-  const kl = localStorage.getItem('klogo') ? await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = localStorage.getItem('klogo'); }) : null;
-  for (let p = 0; p < n; p++) pages.push(await drawPage(f, rows.slice(p * 2, p * 2 + 2), p + 1, n, kl, made));
+  await kop.decode();
+  for (let p = 0; p < n; p++) pages.push(await drawPage(lok, rows.slice(p * 2, p * 2 + 2), p + 1, n, made));
   return pdf(pages);
 }
 /* PDF minimal: satu gambar JPEG (DCTDecode) penuh per halaman A4 */

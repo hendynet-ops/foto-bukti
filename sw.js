@@ -1,5 +1,5 @@
-const CACHE = 'foto-bukti-v3'; // naikkan angka ini setiap kali index.html diubah
-const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './logo.png', './logo-form.png'];
+const CACHE = 'foto-bukti-v4'; // naikkan angka ini setiap kali index.html diubah
+const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './logo.png', './kop.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(k => Promise.all(k.filter(n => n !== CACHE).map(n => caches.delete(n)))));
