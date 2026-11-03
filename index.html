@@ -53,8 +53,10 @@ dialog{margin:auto;background:var(--bg);color:var(--fg);border:1px solid #2a3038
 dialog::backdrop{background:rgba(0,0,0,.6)}
 dialog form{display:grid;gap:12px}
 dialog label{display:grid;gap:6px;font-size:13px;color:var(--mut)}
-#jobc{grid-column:1/-1}
-#jobc[hidden]{display:none}
+#jobrow{grid-column:1/-1;display:flex;gap:8px}
+#jobrow[hidden],#jobrow [hidden]{display:none}
+#jobrow button{min-width:0;flex:none}
+#jobdel{margin-left:auto}
 #again{position:fixed;left:50%;top:40%;transform:translateX(-50%);padding:14px 22px;box-shadow:0 4px 20px rgba(0,0,0,.6)}
 #again[hidden]{display:none}
 #shot{width:74px;height:74px;border-radius:50%;border:4px solid #fff;background:#fff;padding:0;min-width:0;box-shadow:inset 0 0 0 4px var(--bg)}
@@ -83,7 +85,7 @@ dialog label{display:grid;gap:6px;font-size:13px;color:var(--mut)}
     <div class="in">
       <select id="job" aria-label="Pekerjaan"></select>
       <div class="seg" id="ph"><button data-v="Sebelum">Sebelum</button><button data-v="Sesudah">Sesudah</button></div>
-      <input id="jobc" type="text" placeholder="Tulis nama pekerjaan" maxlength="60" autocomplete="off" hidden>
+      <div id="jobrow" hidden><input id="jobc" type="text" placeholder="Tulis nama pekerjaan" maxlength="60" autocomplete="off"><button id="jobsave" class="pri">Simpan</button><button id="jobdel">Hapus dari daftar</button></div>
     </div>
     <div class="row" id="main">
       <button id="flip">Balik kamera</button>
@@ -118,15 +120,34 @@ let stream, facing = 'environment', pos = null, heading = null, addr = '', addrA
 
 /* Pekerjaan + Sebelum/Sesudah (dipakai untuk menyusun form A4) */
 const JOBS = ['Safety Briefing', 'Instalasi RAM', 'Instalasi SSD', 'Cleaning Internal & Eksternal PC', 'Pemeriksaan Keyboard & Mouse', 'Pemeriksaan Network'];
-const jobI = $('#job'), jobC = $('#jobc'), OWN = '*';
-JOBS.forEach(j => jobI.add(new Option(j, j)));
-jobI.add(new Option('Lainnya (isi sendiri)…', OWN));
-jobI.value = [...JOBS, OWN].includes(localStorage.getItem('job')) ? localStorage.getItem('job') : JOBS[0];
-jobC.value = localStorage.getItem('jobc') || '';
-const jobShow = () => { jobC.hidden = jobI.value !== OWN; };
+const jobI = $('#job'), jobC = $('#jobc'), jobSave = $('#jobsave'), jobDel = $('#jobdel'), OWN = '*';
+let myJobs = []; try { myJobs = JSON.parse(localStorage.getItem('jobs')) || []; } catch (e) {}
+const allJobs = () => [...JOBS, ...myJobs];
+const jobShow = () => {
+  const own = jobI.value === OWN, mine = myJobs.includes(jobI.value);
+  $('#jobrow').hidden = !own && !mine; jobC.hidden = jobSave.hidden = !own; jobDel.hidden = !mine;
+};
+function jobFill(v) {
+  jobI.innerHTML = '';
+  allJobs().forEach(j => jobI.add(new Option(j, j)));
+  jobI.add(new Option('Lainnya (isi sendiri)…', OWN));
+  jobI.value = [...allJobs(), OWN].includes(v) ? v : JOBS[0];
+  localStorage.setItem('job', jobI.value); jobShow();
+}
+const myJobsSet = l => { myJobs = l; localStorage.setItem('jobs', JSON.stringify(l)); };
 jobI.onchange = () => { localStorage.setItem('job', jobI.value); jobShow(); if (!jobC.hidden) jobC.focus(); };
+jobC.value = localStorage.getItem('jobc') || '';
 jobC.oninput = () => localStorage.setItem('jobc', jobC.value);
-jobShow();
+jobSave.onclick = () => {
+  const j = jobC.value.trim(); if (!j) return toast('Tulis nama pekerjaan dulu');
+  if (!allJobs().includes(j)) myJobsSet([...myJobs, j]);
+  jobC.value = ''; localStorage.setItem('jobc', ''); jobFill(j); toast('Disimpan ke daftar pekerjaan');
+};
+jobDel.onclick = () => {
+  const j = jobI.value;
+  if (confirm(`Hapus "${j}" dari daftar pekerjaan? Foto yang sudah diambil tidak berubah.`)) { myJobsSet(myJobs.filter(x => x !== j)); jobFill(JOBS[0]); }
+};
+jobFill(localStorage.getItem('job'));
 const jobNow = () => jobI.value === OWN ? jobC.value.trim() : jobI.value;
 let phase = localStorage.getItem('ph') === 'Sesudah' ? 'Sesudah' : 'Sebelum';
 const phSet = p => { phase = p; localStorage.setItem('ph', p); document.querySelectorAll('#ph button').forEach(b => b.classList.toggle('on', b.dataset.v === p)); };
@@ -302,7 +323,7 @@ async function renderHist() {
   items.forEach(it => {
     const d = document.createElement('div'); d.className = 'th';
     const i = new Image(); i.src = URL.createObjectURL(it.blob); i.alt = it.name; d.appendChild(i);
-    if (it.job) { const b = document.createElement('i'); b.textContent = (JOBS.indexOf(it.job) + 1 || '•') + (it.ph === 'Sesudah' ? ' Ssd' : ' Sbl'); d.appendChild(b); }
+    if (it.job) { const b = document.createElement('i'); b.textContent = (allJobs().indexOf(it.job) + 1 || '•') + (it.ph === 'Sesudah' ? ' Ssd' : ' Sbl'); d.appendChild(b); }
     d.title = it.job ? `${it.job} - ${it.ph}` : 'Ketuk untuk simpan/bagikan lagi';
     d.onclick = () => {
       if (!selMode) return output(it.blob, it.name);
@@ -353,7 +374,7 @@ const loadImg = b => new Promise((res, rej) => { const i = new Image(), u = URL.
 /* Baris form: tiap pekerjaan jadi pasangan Sebelum | Sesudah, foto tanpa pekerjaan diisi berurutan */
 function formRows(list) {
   list = [...list].sort((a, b) => a.t - b.t);
-  const rows = [], jobs = [...JOBS, ...new Set(list.map(i => i.job).filter(j => j && !JOBS.includes(j)))];
+  const rows = [], jobs = [...allJobs(), ...new Set(list.map(i => i.job).filter(j => j && !allJobs().includes(j)))];
   jobs.forEach(j => {
     const a = list.filter(i => i.job === j && i.ph !== 'Sesudah'), b = list.filter(i => i.job === j && i.ph === 'Sesudah');
     for (let k = 0; k < Math.max(a.length, b.length); k++) rows.push([{ label: j + ' - Sebelum', it: a[k] }, { label: j + ' - Sesudah', it: b[k] }]);
