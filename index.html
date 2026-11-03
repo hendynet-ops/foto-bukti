@@ -117,7 +117,7 @@ let stream, facing = 'environment', pos = null, heading = null, addr = '', addrA
 ['loc', 'note'].forEach(k => { const e = $('#' + k); e.value = localStorage.getItem(k) || ''; e.addEventListener('input', () => { localStorage.setItem(k, e.value); ovRefresh(); }); });
 
 /* Pekerjaan + Sebelum/Sesudah (dipakai untuk menyusun form A4) */
-const JOBS = ['Instalasi RAM', 'Instalasi SSD', 'Cleaning Internal & Eksternal PC', 'Pemeriksaan Keyboard & Mouse', 'Pemeriksaan Network'];
+const JOBS = ['Safety Briefing', 'Instalasi RAM', 'Instalasi SSD', 'Cleaning Internal & Eksternal PC', 'Pemeriksaan Keyboard & Mouse', 'Pemeriksaan Network'];
 const jobI = $('#job'), jobC = $('#jobc'), OWN = '*';
 JOBS.forEach(j => jobI.add(new Option(j, j)));
 jobI.add(new Option('Lainnya (isi sendiri)…', OWN));
